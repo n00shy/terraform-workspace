@@ -13,7 +13,7 @@ module "firewall" {
 
 module "instance" {
 
-  count  = 3
+  count  = 2
   source = "./modules/instance"
 
   instance_name = "cloudops-${terraform.workspace}-${count.index + 1}"
