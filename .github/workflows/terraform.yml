@@ -1,3 +1,4 @@
+```yaml
 name: Terraform CI/CD
 
 on:
@@ -32,7 +33,7 @@ jobs:
       - name: Terraform Init
         run: terraform init -reconfigure
 
-      - name: Select Workspace
+      - name: Select Dev Workspace
         run: |
           terraform workspace select dev || terraform workspace new dev
 
