@@ -4,7 +4,7 @@ terraform {
     key    = "terraform.tfstate"
 
     endpoints = {
-      s3 = "https://objectstore.nyc1.civo.com"
+      s3 = "https://objectstore.nyc1.civo.com/terraform-state"
     }
 
     region = "nyc1"
