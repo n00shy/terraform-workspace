@@ -1,13 +1,13 @@
 module "network" {
   source = "./modules/network"
 
-  network_name = "devops-network"
+  network_name = "devops-${terraform.workspace}-network"
 }
 
 module "firewall" {
   source = "./modules/firewall"
 
-  firewall_name = "devops-firewall"
+  firewall_name = "devops-${terraform.workspace}-firewall"
   network_id    = module.network.network_id
 }
 
