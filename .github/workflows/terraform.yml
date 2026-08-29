@@ -32,7 +32,7 @@ jobs:
 
       - name: Select Dev Workspace
         run: |
-          terraform workspace new dev || terraform workspace select dev
+          terraform workspace select -or-create dev
 
       - name: Terraform Validate
         run: terraform validate
