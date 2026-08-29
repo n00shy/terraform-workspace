@@ -10,5 +10,5 @@ resource "civo_instance" "this" {
 
   disk_image = var.disk_image
 
- 
+
 }
