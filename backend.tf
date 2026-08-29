@@ -1,6 +1,8 @@
 terraform {
   backend "s3" {
-    endpoint = "https://objectstore.nyc1.civo.com"
+    endpoints = {
+  s3 = "https://objectstore.nyc1.civo.com"
+      }
 
     bucket = "terraform-state"
     key    = "terraform.tfstate"
