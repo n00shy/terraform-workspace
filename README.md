@@ -10,16 +10,18 @@ The root module composes three reusable modules:
 Terraform Root Module
 │
 ├── Network Module
-│   └── Creates Civo network
+│   └── Creates a workspace-specific Civo network
 │
 ├── Firewall Module
-│   └── Creates firewall attached to the network
+│   └── Creates a workspace-specific firewall attached to the network
 │
 └── Instance Module × 3
     ├── cloudops-<workspace>-1
     ├── cloudops-<workspace>-2
     └── cloudops-<workspace>-3
 ```
+
+The active Terraform workspace is included in the network, firewall, and instance names. This prevents `dev` and `prod` from trying to create resources with the same names.
 
 The network ID is passed from the network module to the firewall module, and both the network and firewall IDs are passed to the instance modules.
 
@@ -32,6 +34,7 @@ terraform-workspace/
 ├── outputs.tf
 ├── providers.tf
 ├── versions.tf
+├── backend.tf
 ├── .gitignore
 └── modules/
     ├── network/
@@ -53,7 +56,7 @@ terraform-workspace/
 
 ## Terraform Configuration
 
-The project requires Terraform `>= 1.15.0` and uses the Civo provider with the `~> 1.1` constraint. The provider is configured using the selected Civo region. citeturn34file0turn31file0
+The project requires Terraform `>= 1.15.0` and uses the Civo provider with the `~> 1.1` constraint. The provider is configured using the selected Civo region.
 
 Root variables:
 
@@ -67,26 +70,101 @@ Root variables:
 
 This project uses Terraform Workspaces to keep infrastructure state separate between environments.
 
-The initial environments are:
+The environments are:
 
 ```text
  dev  → 3 instances
  prod → 3 instances
 ```
 
-Because the instance hostname includes `terraform.workspace`, each environment gets different instance names:
+Each workspace creates its own network and firewall as well as its three instances.
+
+For example:
 
 ```text
-cloudops-dev-1
-cloudops-dev-2
-cloudops-dev-3
+dev
+├── devops-dev-network
+├── devops-dev-firewall
+├── cloudops-dev-1
+├── cloudops-dev-2
+└── cloudops-dev-3
 
-cloudops-prod-1
-cloudops-prod-2
-cloudops-prod-3
+prod
+├── devops-prod-network
+├── devops-prod-firewall
+├── cloudops-prod-1
+├── cloudops-prod-2
+└── cloudops-prod-3
 ```
 
 The root module uses `count = 3` for the instance module, while `terraform.workspace` is used to identify the environment.
+
+## Remote Terraform State
+
+The project is configured to use **Civo Object Store** as an S3-compatible remote backend.
+
+The Object Store endpoint used by this project is:
+
+```text
+https://objectstore.nyc1.civo.com
+```
+
+The backend is defined in `backend.tf`:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket = "terraform-state"
+    key    = "terraform.tfstate"
+
+    endpoints = {
+      s3 = "https://objectstore.nyc1.civo.com"
+    }
+
+    region = "nyc1"
+
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_region_validation      = true
+    skip_metadata_api_check     = true
+    use_path_style              = true
+
+    skip_s3_checksum = true
+  }
+}
+```
+
+The backend uses the S3 protocol, but the storage itself is **Civo Object Store**, not AWS S3.
+
+### Backend credentials
+
+Do not commit Object Store credentials to Git. Configure them through environment variables:
+
+```bash
+export AWS_ACCESS_KEY_ID="YOUR_CIVO_OBJECT_STORE_ACCESS_KEY"
+export AWS_SECRET_ACCESS_KEY="YOUR_CIVO_OBJECT_STORE_SECRET_KEY"
+```
+
+These variable names are used because the Civo Object Store is S3-compatible.
+
+### Initialize or migrate the backend
+
+For a new checkout:
+
+```bash
+terraform init
+```
+
+When moving an existing local state to the remote backend:
+
+```bash
+terraform state pull > terraform-state-backup.json
+terraform init -migrate-state
+```
+
+Always keep a backup of the local state before migration.
+
+> **Note:** Civo Object Store currently requires Object Stores to be created with a minimum size of 500 GB in the Civo CLI used for this project.
 
 ## Getting Started
 
@@ -94,21 +172,28 @@ The root module uses `count = 3` for the instance module, while `terraform.works
 
 Configure your Civo API credentials using the Civo CLI/environment according to your local setup. Do not commit credentials to the repository.
 
-### 2. Initialize Terraform
+### 2. Configure local Terraform variables
+
+Create a local `terraform.tfvars` file with your environment-specific values:
+
+```hcl
+region     = "nyc1"
+ssh_key_id = "YOUR_SSH_KEY_ID"
+disk_image = "YOUR_DISK_IMAGE_UUID"
+```
+
+`terraform.tfvars` is intentionally ignored by Git because it contains environment-specific infrastructure values.
+
+### 3. Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-### 3. Format the configuration
+### 4. Format and validate
 
 ```bash
 terraform fmt -recursive
-```
-
-### 4. Validate the configuration
-
-```bash
 terraform validate
 ```
 
@@ -124,21 +209,16 @@ If it already exists:
 terraform workspace select dev
 ```
 
-### 6. Plan the development environment
+### 6. Plan and apply development
 
 ```bash
 terraform plan
-```
-
-### 7. Apply the development environment
-
-```bash
 terraform apply
 ```
 
-This creates one network, one firewall, and three Civo instances for the `dev` workspace.
+This creates one development network, one development firewall, and three Civo instances.
 
-### 8. Create the production workspace
+### 7. Create the production workspace
 
 ```bash
 terraform workspace new prod
@@ -157,7 +237,7 @@ terraform plan
 terraform apply
 ```
 
-This creates a separate set of resources tracked by the `prod` workspace state.
+This creates a separate production network, firewall, and three instances tracked by the `prod` workspace state.
 
 ## Workspace Commands
 
@@ -180,6 +260,14 @@ terraform workspace select dev
 terraform workspace select prod
 ```
 
+Destroy only the current workspace:
+
+```bash
+terraform destroy
+```
+
+> Always run `terraform workspace show` before `terraform destroy` to confirm that you are operating on the intended environment.
+
 ## Outputs
 
 The root module exposes:
@@ -193,19 +281,27 @@ The instance outputs use `module.instance[*]` because the instance module is cre
 
 ## Security
 
-`terraform.tfvars` is ignored by Git in this project, along with Terraform state files, the `.terraform` directory, and private key files. Keep credentials and sensitive infrastructure values out of Git history. fileciteturn27file0L2-L2
+`terraform.tfvars` is ignored by Git in this project, along with Terraform state files, the `.terraform` directory, and private key files. Keep Civo API credentials, Object Store credentials, and other sensitive infrastructure values out of Git history.
 
-A local `terraform.tfvars` can contain the required values, for example:
+Never commit:
 
-```hcl
-region     = "nyc1"
-ssh_key_id = "YOUR_SSH_KEY_ID"
-disk_image = "YOUR_DISK_IMAGE_UUID"
+```text
+terraform.tfvars
+terraform.tfstate
+terraform.tfstate.*
+*.pem
 ```
 
 ## Current Status
 
-The current root configuration creates the network and firewall modules and calls the instance module three times. Instance names are derived from the active Terraform workspace. fileciteturn62file0L1-L10
+The current root configuration:
+
+- Creates a separate network for each Terraform workspace.
+- Creates a separate firewall for each Terraform workspace.
+- Creates three Civo instances per workspace.
+- Uses workspace-aware resource names.
+- Supports Civo Object Store as an S3-compatible Terraform backend.
+- Uses Terraform Workspaces to isolate `dev` and `prod` state.
 
 ## Learning Goals
 
@@ -215,6 +311,9 @@ This project is intended to practice:
 - Module inputs and outputs
 - Terraform `count`
 - Terraform Workspaces
+- Workspace-specific resource naming
 - State isolation between environments
+- Remote Terraform state
+- S3-compatible backends
 - Resource dependencies between modules
 - Civo infrastructure provisioning
