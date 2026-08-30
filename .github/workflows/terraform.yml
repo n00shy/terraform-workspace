@@ -48,6 +48,6 @@ jobs:
         run: terraform apply --auto-approve
         env:
           CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
-          TF_VAR_region: ${{ vars.CIVO_REGION }}
-          TF_VAR_disk_image: ${{ vars.CIVO_DISK_IMAGE }}
-          TF_VAR_ssh_key_id: ${{ secrets.CIVO_SSH_KEY_ID }}
+          TF_VAR_region: ${{ vars.TF_VAR_region}}
+          TF_VAR_disk_image: ${{ vars.disk_image }}
+          TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
