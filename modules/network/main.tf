@@ -1,3 +1,3 @@
-resource "civo_network" "this2" {
+resource "civo_network" "this" {
   label = "${var.network_name}-${terraform.workspace}"
 }
