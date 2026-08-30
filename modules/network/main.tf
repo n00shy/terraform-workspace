@@ -1,3 +1,3 @@
-resource "civo_network" "this" {
+resource "civo_network" "this2" {
   label = var.network_name
 }
