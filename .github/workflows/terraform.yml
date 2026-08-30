@@ -43,3 +43,6 @@ jobs:
           TF_VAR_disk_image: ${{ vars.disk_image }}
           TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
         run: terraform plan
+
+      - name: terraform apply
+        run: terraform apply --auto-approve      
