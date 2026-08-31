@@ -1,8 +1,8 @@
 # Terraform Workspace — Civo Cloud
 
-A hands-on **Terraform + Civo Cloud** project demonstrating reusable modules, Terraform Workspaces, environment isolation, remote state, and Infrastructure as Code best practices.
+A hands-on **Terraform + Civo Cloud** Infrastructure as Code project demonstrating reusable modules, Terraform Workspaces, environment isolation, remote state, and CI/CD automation with GitHub Actions.
 
-> **Project goal:** provision repeatable development and production infrastructure from the same Terraform configuration while keeping each environment isolated through Terraform Workspaces.
+> **Project goal:** provision repeatable development and production infrastructure from the same Terraform configuration while keeping environments isolated through Terraform Workspaces and validating every change through CI/CD.
 
 ## Architecture
 
@@ -14,22 +14,25 @@ A hands-on **Terraform + Civo Cloud** project demonstrating reusable modules, Te
               ▼                   ▼                   ▼
        Network Module       Firewall Module      Instance Module
               │                   │                   │
-              │                   │              ┌────┴────┐
-              │                   │              │         │
-              ▼                   ▼              ▼         ▼
+              ▼                   ▼              ┌────┴────┐
        Civo Network          Civo Firewall   Instance 1  Instance 2
               │                   │              │         │
-              └──────────────┬────┴──────────────┴─────────┘
-                             │
-                      Terraform Workspace
-                       dev / prod isolation
-                             │
-                             ▼
+              └───────────────────┴──────────────┴─────────┘
+                                  │
+                                  ▼
+                       Terraform Workspaces
+                          dev / prod isolation
+                                  │
+                                  ▼
                     Civo Object Store Backend
                          Remote State (S3)
+                                  │
+                                  ▼
+                         GitHub Actions CI/CD
+                  fmt → init → validate → plan
 ```
 
-Each workspace creates its own network, firewall, and **two Civo instances**. Resource names include `terraform.workspace` so `dev` and `prod` can coexist without naming collisions.
+Each workspace creates its own network, firewall, and **two Civo instances**. Resource names include `terraform.workspace`, allowing `dev` and `prod` to coexist without naming collisions.
 
 ## Project Highlights
 
@@ -40,7 +43,9 @@ Each workspace creates its own network, firewall, and **two Civo instances**. Re
 - Explicit module inputs and outputs for resource dependencies.
 - Civo Object Store used as an S3-compatible remote Terraform backend.
 - Credentials kept outside the repository through environment variables and GitHub Secrets.
-- Terraform formatting, validation, and plan checks through GitHub Actions.
+- Automated CI/CD checks with GitHub Actions.
+- Safe CI pipeline that validates and plans infrastructure without automatically applying changes.
+- Git-based infrastructure workflow suitable for pull requests and team review.
 
 ## Project Structure
 
@@ -137,31 +142,7 @@ Backend endpoint:
 https://objectstore.nyc1.civo.com
 ```
 
-The backend is configured in `backend.tf`:
-
-```hcl
-terraform {
-  backend "s3" {
-    bucket = "terraform-state"
-    key    = "terraform.tfstate"
-
-    endpoints = {
-      s3 = "https://objectstore.nyc1.civo.com"
-    }
-
-    region = "nyc1"
-
-    skip_credentials_validation = true
-    skip_requesting_account_id  = true
-    skip_region_validation      = true
-    skip_metadata_api_check     = true
-    use_path_style              = true
-    skip_s3_checksum            = true
-  }
-}
-```
-
-The backend uses the S3 protocol for compatibility, but the actual object storage is **Civo Object Store**, not AWS S3.
+The backend is configured in `backend.tf` using the S3 protocol for compatibility, while the actual object storage is Civo Object Store rather than AWS S3.
 
 ### Backend credentials
 
@@ -258,6 +239,159 @@ terraform apply
 
 This provisions a separate production network, firewall, and two instances with separate workspace state.
 
+## CI/CD Pipeline
+
+GitHub Actions is used as the automated quality gate for infrastructure changes. The workflow runs on pushes and pull requests targeting `main` and executes Terraform checks in a clean GitHub-hosted runner.
+
+### Pipeline flow
+
+```text
+Developer
+   │
+   │ git push / Pull Request
+   ▼
+GitHub Actions
+   │
+   ├── Checkout repository
+   │
+   ├── Install / setup Terraform
+   │
+   ├── Terraform format
+   │
+   ├── Terraform init
+   │
+   ├── Select or create dev workspace
+   │
+   ├── Terraform validate
+   │
+   └── Terraform plan
+   │
+   ▼
+   CI result
+   │
+   ├── PASS → safe to review / merge
+   └── FAIL → fix infrastructure code
+```
+
+### CI stages
+
+**1. Checkout**
+
+The workflow checks out the exact repository revision that triggered the pipeline, ensuring that the validation corresponds to the code being reviewed.
+
+**2. Terraform setup**
+
+Terraform is installed in the runner before infrastructure commands are executed. This keeps the CI environment consistent and reproducible.
+
+**3. Formatting**
+
+The workflow runs Terraform formatting so infrastructure files follow a consistent Terraform style.
+
+```bash
+terraform fmt -recursive
+```
+
+The pipeline uses formatting as a normalization/validation step rather than allowing formatting differences to block the remaining infrastructure checks.
+
+**4. Backend initialization**
+
+Terraform initializes the project and configures the remote backend:
+
+```bash
+terraform init -reconfigure
+```
+
+The backend uses Civo Object Store through its S3-compatible API. Backend credentials are supplied through GitHub Secrets rather than stored in the repository.
+
+**5. Workspace isolation**
+
+The CI workflow selects or creates the `dev` workspace before validation and planning:
+
+```bash
+terraform workspace select -or-create dev
+```
+
+This ensures that CI operates against a known Terraform workspace instead of accidentally using an unexpected environment.
+
+**6. Validation**
+
+Terraform validates the configuration and module relationships:
+
+```bash
+terraform validate
+```
+
+This catches configuration and syntax problems before a plan is generated.
+
+**7. Terraform plan**
+
+The final CI stage generates an execution plan:
+
+```bash
+terraform plan
+```
+
+This allows changes to infrastructure to be reviewed before they are applied.
+
+### Why CI stops at `plan`
+
+The workflow intentionally **does not run `terraform apply` automatically**.
+
+This is an important safety boundary:
+
+```text
+Pull Request
+     │
+     ▼
+  Validate
+     │
+     ▼
+    Plan
+     │
+     ▼
+ Human review / approval
+     │
+     ▼
+ Controlled apply
+```
+
+A pull request or accidental push therefore cannot automatically create, modify, or destroy Civo infrastructure.
+
+### Secrets management
+
+The CI workflow is designed to keep credentials outside source control.
+
+Typical GitHub Actions secrets include:
+
+```text
+CIVO_TOKEN
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
+The Civo API token is used by the Civo Terraform provider, while the AWS-compatible variables are used for authentication against the Civo Object Store backend.
+
+No credentials should be hard-coded in:
+
+- Terraform files
+- `.tfvars` files committed to Git
+- GitHub Actions YAML
+- README documentation
+- Terraform state committed to the repository
+
+### CI/CD benefits
+
+This setup demonstrates a practical Infrastructure as Code workflow:
+
+- **Consistency** — Terraform configuration is checked automatically.
+- **Early feedback** — syntax and validation issues are caught before deployment.
+- **Change visibility** — `terraform plan` shows the expected infrastructure changes.
+- **Environment isolation** — CI uses an explicit workspace.
+- **Credential security** — secrets are injected by GitHub Actions.
+- **Reviewability** — pull requests can be used as infrastructure change requests.
+- **Deployment safety** — production changes are not applied automatically.
+- **Repeatability** — the same checks run consistently on every workflow execution.
+
 ## Workspace Commands
 
 List all workspaces:
@@ -301,24 +435,6 @@ The root module exposes:
 
 The instance outputs use `module.instance[*]` because the instance module is created multiple times with Terraform `count`.
 
-## CI/CD
-
-The repository includes a GitHub Actions workflow for automated Terraform checks on pushes and pull requests targeting `main`.
-
-The workflow runs:
-
-```bash
-terraform fmt -check -recursive
-terraform init -reconfigure
-terraform workspace select -or-create dev
-terraform validate
-terraform plan
-```
-
-The workflow intentionally stops at **plan**. It does not run `terraform apply`, preventing a repository push or pull request from automatically changing cloud infrastructure.
-
-Sensitive values such as the Civo API token and remote backend credentials should be provided through **GitHub Secrets**, never hard-coded in workflow files or Terraform configuration.
-
 ## Security
 
 Sensitive infrastructure data is intentionally excluded from Git.
@@ -361,16 +477,21 @@ This project demonstrates practical experience with:
 - Infrastructure dependencies between modules
 - Terraform validation and formatting
 - GitHub Actions CI/CD
+- CI-based Terraform planning
 - Secure secret management
+- Infrastructure change review
 
 ## Future Improvements
 
-Potential next steps for the project include:
+Potential next steps include:
 
-- Add environment-specific variable files or a stronger environment abstraction.
 - Add `terraform-docs` generated documentation.
-- Add security scanning with tools such as Checkov or Trivy.
-- Add automated infrastructure deployment with protected production approvals.
+- Add IaC security scanning with Checkov or Trivy.
+- Add `tflint` for Terraform linting.
+- Publish Terraform plan output as a pull-request artifact or comment.
+- Add protected production deployment with manual approval.
+- Separate development and production deployment workflows.
+- Add automated infrastructure testing.
 - Extend the infrastructure with load balancing, Kubernetes, monitoring, or DNS.
 
 ## Author
