@@ -42,6 +42,7 @@ jobs:
           terraform workspace select -or-create prod
           else
           terraform workspace select -or-create dev
+          fi
 
       - name: Terraform Validate
         run: terraform validate
