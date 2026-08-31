@@ -1,3 +1,4 @@
+```yaml
 name: Terraform CI
 
 on:
@@ -5,6 +6,7 @@ on:
     branches:
       - main
       - prod
+
   push:
     branches:
       - main
@@ -33,13 +35,18 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt
 
-      - name: Show branch
-        run: echo "Branch: ${{ github.ref_name }}"
+      - name: Show branch information
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref_name }}"
+          echo "Source branch: ${{ github.head_ref }}"
+          echo "Target branch: ${{ github.base_ref }}"
 
       - name: Terraform Init
         run: terraform init -reconfigure
 
       - name: Select Terraform workspace
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BRANCH="${{ github.head_ref }}"
@@ -47,11 +54,16 @@ jobs:
             BRANCH="${{ github.ref_name }}"
           fi
 
+          echo "Selected branch: $BRANCH"
+
           if [ "$BRANCH" = "prod" ]; then
             terraform workspace select -or-create prod
           else
             terraform workspace select -or-create dev
           fi
+
+          echo "Current Terraform workspace:"
+          terraform workspace show
 
       - name: Terraform Validate
         run: terraform validate
