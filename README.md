@@ -40,7 +40,7 @@ Each workspace creates its own network, firewall, and **two Civo instances**. Re
 - Explicit module inputs and outputs for resource dependencies.
 - Civo Object Store used as an S3-compatible remote Terraform backend.
 - Credentials kept outside the repository through environment variables and GitHub Secrets.
-- Terraform formatting and validation suitable for CI/CD workflows.
+- Terraform formatting, validation, and plan checks through GitHub Actions.
 
 ## Project Structure
 
@@ -59,8 +59,8 @@ terraform-workspace/
 └── modules/
     ├── network/
     │   ├── main.tf
-    │   ├── output.tf
-    │   ├── varibles.tf
+    │   ├── outputs.tf
+    │   ├── variables.tf
     │   └── versions.tf
     ├── firewall/
     │   ├── main.tf
@@ -303,15 +303,19 @@ The instance outputs use `module.instance[*]` because the instance module is cre
 
 ## CI/CD
 
-The repository includes a GitHub Actions workflow for Terraform checks.
+The repository includes a GitHub Actions workflow for automated Terraform checks on pushes and pull requests targeting `main`.
 
-A typical validation pipeline should run:
+The workflow runs:
 
 ```bash
 terraform fmt -check -recursive
-terraform init
+terraform init -reconfigure
+terraform workspace select -or-create dev
 terraform validate
+terraform plan
 ```
+
+The workflow intentionally stops at **plan**. It does not run `terraform apply`, preventing a repository push or pull request from automatically changing cloud infrastructure.
 
 Sensitive values such as the Civo API token and remote backend credentials should be provided through **GitHub Secrets**, never hard-coded in workflow files or Terraform configuration.
 
@@ -364,7 +368,6 @@ This project demonstrates practical experience with:
 Potential next steps for the project include:
 
 - Add environment-specific variable files or a stronger environment abstraction.
-- Add automated `terraform plan` checks for pull requests.
 - Add `terraform-docs` generated documentation.
 - Add security scanning with tools such as Checkov or Trivy.
 - Add automated infrastructure deployment with protected production approvals.
