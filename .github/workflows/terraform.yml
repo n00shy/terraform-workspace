@@ -1,3 +1,4 @@
+```yaml
 name: Terraform CI
 
 on:
@@ -42,15 +43,15 @@ jobs:
       - name: Select Terraform workspace
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-          BRANCH="${{ github.head_ref }}"
+            BRANCH="${{ github.head_ref }}"
           else
-          BRANCH="${{ github.ref_name }}"
+            BRANCH="${{ github.ref_name }}"
           fi
 
           if [ "$BRANCH" = "prod" ]; then
-          terraform workspace select -or-create prod
+            terraform workspace select -or-create prod
           else
-          terraform workspace select -or-create dev
+            terraform workspace select -or-create dev
           fi
 
       - name: Terraform Validate
@@ -62,3 +63,4 @@ jobs:
           TF_VAR_disk_image: ${{ vars.disk_image }}
           TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
         run: terraform plan -lock-timeout=5m
+```
