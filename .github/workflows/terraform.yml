@@ -31,7 +31,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Format Check
-        run: terraform fmt 
+        run: terraform fmt
+
+      - name: Show branch
+        run: echo "Branch: ${{ github.ref_name }}"
 
       - name: Terraform Init
         run: terraform init -reconfigure
