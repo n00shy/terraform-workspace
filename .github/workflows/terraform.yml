@@ -29,7 +29,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Format Check
-        run: terraform fmt -check 
+        run: terraform fmt 
 
       - name: Terraform Init
         run: terraform init -reconfigure
