@@ -41,7 +41,13 @@ jobs:
 
       - name: Select Terraform workspace
         run: |
-          if [ "${{ github.ref_name }}" = "prod" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BRANCH="${{ github.head_ref }}"
+          else
+          BRANCH="${{ github.ref_name }}"
+          fi
+
+          if [ "$BRANCH" = "prod" ]; then
           terraform workspace select -or-create prod
           else
           terraform workspace select -or-create dev
