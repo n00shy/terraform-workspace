@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - main
+      - prod
   push:
     branches:
       - main
+      - prod
 
 permissions:
   contents: read
@@ -34,8 +36,13 @@ jobs:
       - name: Terraform Init
         run: terraform init -reconfigure
 
-      - name: Select Dev Workspace
-        run: terraform workspace select -or-create dev
+      - name: Select Terraform workspace
+        run: |
+          if [ "${{ github.ref_name }}" = "prod" ]; then
+          terraform workspace select -or-create prod
+          else
+          terraform workspace select -or-create dev
+          fi
 
       - name: Terraform Validate
         run: terraform validate
