@@ -1,4 +1,3 @@
-```yaml
 name: Terraform CI
 
 on:
@@ -23,6 +22,7 @@ env:
 
 jobs:
   terraform:
+    name: Terraform CI
     runs-on: ubuntu-latest
 
     steps:
@@ -33,9 +33,9 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Format Check
-        run: terraform fmt
+        run: terraform fmt -check -recursive
 
-      - name: Show branch information
+      - name: Show GitHub Context
         run: |
           echo "Event: ${{ github.event_name }}"
           echo "Ref: ${{ github.ref_name }}"
@@ -45,22 +45,26 @@ jobs:
       - name: Terraform Init
         run: terraform init -reconfigure
 
-      - name: Select Terraform workspace
+      - name: Select Terraform Workspace
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BRANCH="${{ github.head_ref }}"
+            if [ "${{ github.head_ref }}" = "prod" ]; then
+              WORKSPACE="prod"
+            else
+              WORKSPACE="dev"
+            fi
           else
-            BRANCH="${{ github.ref_name }}"
+            if [ "${{ github.ref_name }}" = "prod" ]; then
+              WORKSPACE="prod"
+            else
+              WORKSPACE="dev"
+            fi
           fi
 
-          echo "Selected branch: $BRANCH"
+          echo "Selected Terraform workspace: $WORKSPACE"
 
-          if [ "$BRANCH" = "prod" ]; then
-            terraform workspace select -or-create prod
-          else
-            terraform workspace select -or-create dev
-          fi
+          terraform workspace select -or-create "$WORKSPACE"
 
           echo "Current Terraform workspace:"
           terraform workspace show
@@ -74,4 +78,3 @@ jobs:
           TF_VAR_disk_image: ${{ vars.disk_image }}
           TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
         run: terraform plan -lock-timeout=5m
-```
