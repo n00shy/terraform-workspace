@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
   AWS_REQUEST_CHECKSUM_CALCULATION: when_required
@@ -25,8 +28,8 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Format
-        run: terraform fmt -recursive
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
 
       - name: Terraform Init
         run: terraform init -reconfigure
@@ -42,12 +45,4 @@ jobs:
           TF_VAR_region: ${{ vars.TF_VAR_region }}
           TF_VAR_disk_image: ${{ vars.disk_image }}
           TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
-        run: terraform plan
-
-      - name: terraform apply
-        run: terraform apply --auto-approve
-        env:
-          CIVO_TOKEN: ${{ secrets.CIVO_TOKEN }}
-          TF_VAR_region: ${{ vars.TF_VAR_region}}
-          TF_VAR_disk_image: ${{ vars.disk_image }}
-          TF_VAR_ssh_key_id: ${{ vars.ssh_key_id }}
+        run: terraform plan -lock-timeout=5m
